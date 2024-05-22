@@ -5,6 +5,7 @@ import os
 from typing import Optional
 from urllib import request as request
 
+from tqdm import tqdm
 import numpy as np
 import torch
 from ase.db import connect
@@ -14,6 +15,7 @@ from torch_geometric.loader import DataLoader
 from schnetpack.data import AtomsDataFormat, load_dataset
 
 import nablaDFT
+from nablaDFT.utils import tqdm_download_hook, get_file_size
 from .atoms_datamodule import AtomsDataModule
 from .pyg_datasets import PyGNablaDFT, PyGHamiltonianNablaDFT
 
@@ -82,7 +84,9 @@ class ASENablaDFT(AtomsDataModule):
                     url = data["train_databases"][self.dataset_name]
                 else:
                     url = data["test_databases"][self.dataset_name]
-                request.urlretrieve(url, self.datapath)
+                file_size = get_file_size(url)
+                with tqdm(unit="B", unit_scale=True, unit_divisor=1024, miniters=1, total=file_size, desc=f"Downloading split: {self.dataset_name}") as t:
+                    request.urlretrieve(url, self.datapath, reporthook=tqdm_download_hook(t))
         with connect(self.datapath) as ase_db:
             if not ase_db.metadata:
                 atomrefs = np.load(
