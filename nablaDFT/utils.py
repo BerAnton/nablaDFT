@@ -4,6 +4,7 @@ import json
 import random
 from typing import List
 from urllib import request as request
+from pathlib import Path
 import logging
 import warnings
 
@@ -11,14 +12,14 @@ from tqdm import tqdm
 import pytorch_lightning as pl
 from pytorch_lightning import LightningModule
 from pytorch_lightning.utilities import rank_zero_only
+from pytorch_lightning.strategies.ddp import DDPStrategy
 
 import hydra
 import numpy as np
 from dotenv import load_dotenv
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf, open_dict
 import wandb
 import torch
-import hydra
 
 
 import nablaDFT
@@ -109,7 +110,7 @@ def download_model(config: DictConfig) -> str:
         os.makedirs(f"./checkpoints/{model_name}", exist_ok=True)
     with open(nablaDFT.__path__[0] + "/links/models_checkpoints.json", "r") as f:
         data = json.load(f)
-        url = data[f"{model_name}"]["dataset_train_100k"]
+        url = data[f"{model_name}"]["dataset_train_large"]
     file_size = get_file_size(url)
     with tqdm(unit="B", unit_scale=True, unit_divisor=1024, miniters=1, total=file_size, desc=f"Downloading {model_name} checkpoint") as t:
         request.urlretrieve(url, ckpt_path, reporthook=tqdm_download_hook(t))
@@ -135,3 +136,19 @@ def load_model(config: DictConfig, ckpt_path: str) -> LightningModule:
         logger.info(f"Restore model weights from {ckpt_path}")
     model.eval()
     return model
+
+
+def set_additional_params(config: DictConfig) -> DictConfig:
+    datamodule_cls = config.datamodule._target_
+    if datamodule_cls == "nablaDFT.dataset.ASENablaDFT":
+        config.root = os.path.join(config.root, "raw")
+    if config.name in ['SchNet', 'PaiNN', 'Dimenet++']:
+        with open_dict(config):
+            config.trainer.inference_mode = False
+    if len(config.devices) > 1:
+        with open_dict(config):
+            config.trainer.strategy = DDPStrategy()
+    if config.job_type == "train" and config.name == "QHNet":
+        with open_dict(config):
+            config.trainer.find_unused_parameters = True
+    return config

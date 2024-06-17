@@ -9,9 +9,16 @@
   "test_databases": {
     "dataset_test_structures": "https://a002dlils-kadurin-nabladft.obs.ru-moscow-1.hc.sbercloud.ru/data/nablaDFTv2/energy_databases/test_full_structures_v2_formation_energy_forces.db",
     "dataset_test_scaffolds": "https://a002dlils-kadurin-nabladft.obs.ru-moscow-1.hc.sbercloud.ru/data/nablaDFTv2/energy_databases/test_full_scaffolds_v2_formation_energy_forces.db",
+    "dataset_test_conformations_full": "https://a002dlils-kadurin-nabladft.obs.ru-moscow-1.hc.sbercloud.ru/data/nablaDFTv2/energy_databases/test_full_conformers_v2_formation_energy.db",
     "dataset_test_conformations_large": "https://a002dlils-kadurin-nabladft.obs.ru-moscow-1.hc.sbercloud.ru/data/nablaDFTv2/energy_databases/test_100k_conformers_v2_formation_energy_w_forces.db",
     "dataset_test_conformations_medium": "https://a002dlils-kadurin-nabladft.obs.ru-moscow-1.hc.sbercloud.ru/data/nablaDFTv2/energy_databases/test_10k_conformers_v2_formation_energy_w_forces.db",
     "dataset_test_conformations_small": "https://a002dlils-kadurin-nabladft.obs.ru-moscow-1.hc.sbercloud.ru/data/nablaDFTv2/energy_databases/test_5k_conformers_v2_formation_energy_w_forces.db",
     "dataset_test_conformations_tiny": "https://a002dlils-kadurin-nabladft.obs.ru-moscow-1.hc.sbercloud.ru/data/nablaDFTv2/energy_databases/test_2k_conformers_v2_formation_energy_w_forces.db"
+  },
+  "trajectory_databases": {
+    "dataset_test_trajectories_initial": "https://a002dlils-kadurin-nabladft.obs.ru-moscow-1.hc.sbercloud.ru/data/nablaDFTv2/energy_databases/test_trajectories_initial.db",
+    "dataset_test_trajectories": "https://a002dlils-kadurin-nabladft.obs.ru-moscow-1.hc.sbercloud.ru/data/nablaDFTv2/energy_databases/test_trajectories.db",
+    "dataset_train_medium_trajectories": "https://a002dlils-kadurin-nabladft.obs.ru-moscow-1.hc.sbercloud.ru/data/nablaDFTv2/energy_databases/train_medium_v2_trajectories.db",
+    "dataset_trajectories_additional": "https://a002dlils-kadurin-nabladft.obs.ru-moscow-1.hc.sbercloud.ru/data/nablaDFTv2/energy_databases/additional_trajectories.db"
   }
 }
