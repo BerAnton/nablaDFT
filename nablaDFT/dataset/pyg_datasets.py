@@ -1,10 +1,8 @@
-"""Module describes PyTorch Geometric interfaces for various NablaDFT datasets"""
+"""Module describes PyTorch Geometric interfaces for nablaDFT datasets"""
 
-import json
 import os
 import logging
 from typing import List, Callable
-from urllib import request as request
 
 from tqdm import tqdm
 import numpy as np
@@ -12,23 +10,37 @@ import torch
 from ase.db import connect
 from torch_geometric.data import InMemoryDataset, Data, Dataset
 
-import nablaDFT
 from .hamiltonian_dataset import HamiltonianDatabase
-from nablaDFT.utils import tqdm_download_hook, get_file_size
+from nablaDFT.utils import download_file
+from nablaDFT.dataset.registry import dataset_registry
 
 logger = logging.getLogger(__name__)
 
 
 class PyGNablaDFT(InMemoryDataset):
     """Pytorch Geometric interface for nablaDFT datasets.
-    Based on https://github.com/atomicarchitects/equiformer/blob/master/datasets/pyg/md17.py
+
+    Based on `MD17 implementation <https://github.com/atomicarchitects/equiformer/blob/master/datasets/pyg/md17.py>`_.
+
+    .. code-block:: python
+        from nablaDFT.dataset import PyGNablaDFT
+        dataset = PyGNablaDFT(
+            datapath="./datasets/",
+            dataset_name="dataset_train_tiny",
+            split="train"
+        )
+        sample = dataset[0]
+
+    .. note::
+        If split parameter is 'train' or 'test' and dataset name are ones from nablaDFT splits
+        (see nablaDFT/links/energy_databases.json), dataset will be downloaded automatically.
 
     Args:
         datapath (str): path to existing dataset directory or location for download.
         dataset_name (str): split name from links .json or filename of existing file from datapath directory.
         split (str): type of split, must be one of ['train', 'test', 'predict'].
         transform (Callable): callable data transform, called on every access to element.
-        pre_transform (Callable): callable data transform, called on every access to element.
+        pre_transform (Callable): callable data transform, called on every element during process.
     """
 
     db_suffix = ".db"
@@ -78,21 +90,9 @@ class PyGNablaDFT(InMemoryDataset):
         return super(PyGNablaDFT, self).get(idx - self.offsets[data_idx])
 
     def download(self) -> None:
-        with open(nablaDFT.__path__[0] + "/links/energy_databases.json", "r") as f:
-            data = json.load(f)
-            url = data[f"{self.split}_databases"][self.dataset_name]
-        file_size = get_file_size(url)
-        with tqdm(
-            unit="B",
-            unit_scale=True,
-            unit_divisor=1024,
-            miniters=1,
-            total=file_size,
-            desc=f"Downloading split: {self.dataset_name}",
-        ) as t:
-            request.urlretrieve(
-                url, self.raw_paths[0], reporthook=tqdm_download_hook(t)
-            )
+        url = dataset_registry.get_dataset_url("energy", self.dataset_name)
+        dataset_etag = dataset_registry.get_dataset_etag("energy", self.dataset_name)
+        download_file(url, self.raw_paths[0], dataset_etag, desc=f"Downloading split: {self.dataset_name}")
 
     def process(self) -> None:
         db = connect(self.raw_paths[0])
@@ -118,6 +118,24 @@ class PyGNablaDFT(InMemoryDataset):
 class PyGHamiltonianNablaDFT(Dataset):
     """Pytorch Geometric interface for nablaDFT Hamiltonian datasets.
 
+    .. code-block:: python
+        from nablaDFT.dataset import PyGHamiltonianNablaDFT
+        dataset = PyGHamiltonianNablaDFT(
+            datapath="./datasets/",
+            dataset_name="dataset_train_tiny",
+            split="train"
+        )
+        sample = dataset[0]
+
+    .. note::
+        If split parameter is 'train' or 'test' and dataset name are ones from nablaDFT splits
+        (see nablaDFT/links/hamiltonian_databases.json), dataset will be downloaded automatically.
+
+    .. note::
+        Hamiltonian matrix for each molecule has different shape. PyTorch Geometric tries to concatenate
+        each torch.Tensor in batch, so in order to make batch from data we leave all hamiltonian matrices
+        in numpy array form. During train, these matrices will be yield as List[np.array].
+
     Args:
         datapath (str): path to existing dataset directory or location for download.
         dataset_name (str): split name from links .json or filename of existing file from datapath directory.
@@ -127,12 +145,7 @@ class PyGHamiltonianNablaDFT(Dataset):
         include_core (bool): if True, retrieves core Hamiltonian matrices from database.
         dtype (torch.dtype): defines torch.dtype for energy, positions and forces tensors.
         transform (Callable): callable data transform, called on every access to element.
-        pre_transform (Callable): callable data transform, called on every access to element.
-
-    Note:
-        Hamiltonian matrix for each molecule has different shape. PyTorch Geometric tries to concatenate
-        each torch.Tensor in batch, so in order to make batch from data we leave all hamiltonian matrices
-        in numpy array form. During train, these matrices will be yield as List[np.array].
+        pre_transform (Callable): callable data transform, called on every element during process.
     """
 
     db_suffix = ".db"
@@ -205,21 +218,9 @@ class PyGHamiltonianNablaDFT(Dataset):
         return data
 
     def download(self) -> None:
-        with open(nablaDFT.__path__[0] + "/links/hamiltonian_databases.json") as f:
-            data = json.load(f)
-            url = data[f"{self.split}_databases"][self.dataset_name]
-        file_size = get_file_size(url)
-        with tqdm(
-            unit="B",
-            unit_scale=True,
-            unit_divisor=1024,
-            miniters=1,
-            total=file_size,
-            desc=f"Downloading split: {self.dataset_name}",
-        ) as t:
-            request.urlretrieve(
-                url, self.raw_paths[0], reporthook=tqdm_download_hook(t)
-            )
+        url = dataset_registry.get_dataset_url("hamiltonian", self.dataset_name)
+        dataset_etag = dataset_registry.get_dataset_etag("hamiltonian", self.dataset_name)
+        download_file(url, self.raw_paths[0], dataset_etag, desc=f"Downloading split: {self.dataset_name}")
 
     def _get_max_orbitals(self, datapath, dataset_name):
         db_path = os.path.join(datapath, "raw/" + dataset_name + self.db_suffix)

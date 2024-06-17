@@ -1,6 +1,5 @@
-"""Module defines Pytorch Lightning DataModule interfaces for various NablaDFT datasets"""
+"""Module defines Pytorch Lightning DataModule interfaces for nablaDFT datasets"""
 from typing import List, Dict, Optional, Union
-import json
 import os
 from urllib import request as request
 
@@ -21,13 +20,15 @@ from schnetpack.data import (
 )
 
 import nablaDFT
-from nablaDFT.utils import tqdm_download_hook, get_file_size
+from nablaDFT.dataset.registry import dataset_registry
+from nablaDFT.utils import download_file
 from .pyg_datasets import PyGNablaDFT, PyGHamiltonianNablaDFT
 
 
 class ASENablaDFT(AtomsDataModule):
-    """PytorchLightning interface for nablaDFT ASE datasets.
-    Overrides schnetpack.AtomsDataModule.
+    """PytorchLightning interface for nablaDFT datasets for SchNetPack based models.
+
+    Inherits from `schnetpack.data.AtomsDataModule <https://schnetpack.readthedocs.io/en/latest/api/generated/data.AtomsDataModule.html#data.AtomsDataModule>`_.
 
     Args:
         split (str): type of split, must be one of ['train', 'test', 'predict'].
@@ -39,9 +40,6 @@ class ASENablaDFT(AtomsDataModule):
         train_transforms (Callable): data transform, called for every sample in training dataset.
         val_transforms (Callable): data transform, called for every sample in validation dataset.
         test_transforms (Callable): data transform, called for every sample in test dataset.
-
-    Other args description could be found in SchNetPack docs:
-    https://schnetpack.readthedocs.io/en/latest/api/generated/data.AtomsDataModule.html#data.AtomsDataModule
     """
 
     format = AtomsDataFormat.ASE
@@ -117,9 +115,7 @@ class ASENablaDFT(AtomsDataModule):
             os.makedirs(datapath_with_no_suffix)
         self.datapath = datapath_with_no_suffix + "/" + self.dataset_name + suffix
         exists = os.path.exists(self.datapath)
-        if self.split == "predict" and not exists:
-            raise FileNotFoundError("Specified dataset not found")
-        elif self.split != "predict" and not exists:
+        if not exists:
             self._download()
         with connect(self.datapath) as ase_db:
             self._check_metadata(ase_db)
@@ -173,7 +169,7 @@ class ASENablaDFT(AtomsDataModule):
         return self._predict_dataset
 
     def predict_dataloader(self) -> AtomsLoader:
-        """Describes predict dataloader, used for prediction task"""
+        """Returns predict dataloader, used for prediction task"""
         if self._predict_dataloader is None:
             self._predict_dataloader = AtomsLoader(
                 self._predict_dataset,
@@ -199,16 +195,9 @@ class ASENablaDFT(AtomsDataModule):
             self._predict_dataset.transforms = self.test_transforms
 
     def _download(self):
-        with open(nablaDFT.__path__[0] + "/links/energy_databases.json") as f:
-            data = json.load(f)
-            if self.train_ratio != 0:
-                url = data["train_databases"][self.dataset_name]
-            else:
-                url = data["test_databases"][self.dataset_name]
-            file_size = get_file_size(url)
-            with tqdm(unit="B", unit_scale=True, unit_divisor=1024, miniters=1, total=file_size,
-                      desc=f"Downloading split: {self.dataset_name}") as t:
-                request.urlretrieve(url, self.datapath, reporthook=tqdm_download_hook(t))
+        url = dataset_registry.get_dataset_url("energy", self.dataset_name)
+        dataset_etag = dataset_registry.get_dataset_etag("energy", self.dataset_name)
+        download_file(url, self.datapath, dataset_etag, desc=f"Downloading split: {self.dataset_name}")
 
     def _check_metadata(self, conn):
         if not conn.metadata:
@@ -226,16 +215,17 @@ class ASENablaDFT(AtomsDataModule):
 
 
 class PyGDataModule(LightningDataModule):
-    """Parent class which encapsulates PyG dataset to use with Pytorch Lightning Trainer.
-    In order to add new dataset variant, define children class with setup() method.
+    """Base class which encapsulates PyG dataset for usage with Pytorch Lightning Trainer.
 
     Args:
-        root (str): path to directory with r'raw/' subfolder with existing dataset or download location.
+        root (str): path to directory with :obj: raw/ subfolder with existing dataset or download location.
         dataset_name (str): split name from links .json or filename of existing file from datapath directory.
         train_size (float): part of dataset used for training, must be in [0, 1].
         val_size (float): part of dataset used for validation, must be in [0, 1].
+        .. note::
+            :obj: train_size and :obj: val_size are not used during :obj: test or :obj: predict pipelines.
         seed (int): seed number, used for torch.Generator object during train/val split.
-        **kwargs: arguments for torch.DataLoader.
+        **kwargs: additional arguments for torch.DataLoader.
     """
 
     def __init__(
@@ -289,13 +279,18 @@ class PyGDataModule(LightningDataModule):
 
 
 class PyGHamiltonianDataModule(PyGDataModule):
-    """DataModule for Hamiltonian nablaDFT dataset, subclass of PyGDataModule.
+    """DataModule for Hamiltonian nablaDFT dataset.
 
-    Keyword arguments:
-        hamiltonian (bool): retrieve from database molecule's full hamiltonian matrix. True by default.
+    .. note::
+        If split parameter is 'train' or 'test' and dataset name are ones from nablaDFT splits
+        (see nablaDFT/links/hamiltonian_databases.json), dataset will be downloaded automatically.
+
+    Args:
+        include_hamiltonian (bool): retrieve from database molecule's full hamiltonian matrix. Default is :obj: True.
         include_overlap (bool): retrieve from database molecule's overlab matrix.
         include_core (bool): retrieve from database molecule's core hamiltonian matrix.
-        **kwargs: arguments for torch.DataLoader and PyGDataModule instance. See PyGDatamodule docs.
+
+    See :class:`nablaDFT.dataset.nablaDFT_dataset.PyGDataModule` for other parameters' description.
     """
 
     def __init__(
@@ -304,9 +299,13 @@ class PyGHamiltonianDataModule(PyGDataModule):
         dataset_name: str,
         train_size: float = None,
         val_size: float = None,
+        include_hamiltonian: bool = True,
+        include_overlap: bool = False,
+        include_core: bool = False,
         **kwargs,
     ) -> None:
-        super().__init__(root, dataset_name, train_size, val_size, **kwargs)
+        super().__init__(root, dataset_name, train_size, val_size, include_hamiltonian=include_hamiltonian,
+                         include_overlap=include_overlap, include_core=include_core, **kwargs)
 
     def setup(self, stage: str) -> None:
         if stage == "fit":
@@ -328,7 +327,13 @@ class PyGHamiltonianDataModule(PyGDataModule):
 
 class PyGNablaDFTDataModule(PyGDataModule):
     """DataModule for nablaDFT dataset, subclass of PyGDataModule.
-    See PyGDatamodule doc."""
+    
+    .. note::
+        If split parameter is 'train' or 'test' and dataset name are ones from nablaDFT splits
+        (see nablaDFT/links/energy_databases.json), dataset will be downloaded automatically.
+
+    See :class:`nablaDFT.dataset.nablaDFT_dataset.PyGDataModule` for reference.
+    """
 
     def __init__(
         self,

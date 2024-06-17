@@ -133,6 +133,7 @@ class QHNet(nn.Module):
         self.output_ij = Linear(self.hidden_irrep, self.hidden_bottle_irrep)
 
     def set(self):
+        # TODO: FIX: outside of lightning module, orbbital_mask remains on CPU.
         for key in self.orbital_mask.keys():
             self.orbital_mask[key] = self.orbital_mask[key].to(self.device)
 
@@ -279,7 +280,7 @@ class QHNetLightning(pl.LightningModule):
     def __init__(
             self,
             model_name: str,
-            net: nn.Module,
+            model: nn.Module,
             optimizer: Optimizer,
             lr_scheduler: LRScheduler,
             losses: Dict,
@@ -288,17 +289,17 @@ class QHNetLightning(pl.LightningModule):
             loss_coefs,
     ) -> None:
         super(QHNetLightning, self).__init__()
-        self.net = net
+        self.model = model
         self.ema = ema
         self.save_hyperparameters(logger=True, ignore=['net'])
 
     def forward(self, data: Data):
         with self.ema.average_parameters():
-            hamiltonian = self.net(data)
+            hamiltonian = self.model(data)
         return hamiltonian
     
     def step(self, batch, calculate_metrics: bool = False):
-        hamiltonian_out = self.net(batch)
+        hamiltonian_out = self.model(batch)
         hamiltonian = batch.hamiltonian
         preds = {'hamiltonian': hamiltonian_out}
         masks = torch.block_diag(*[torch.ones_like(torch.from_numpy(H)) for H in hamiltonian])
@@ -452,7 +453,7 @@ class QHNetLightning(pl.LightningModule):
 
     def _check_devices(self):
         self.hparams.metric = self.hparams.metric.to(self.device)
-        self.net.set()
+        self.model.set()
         if self.ema is not None:
             self.ema.to(self.device)
 
@@ -469,7 +470,7 @@ class QHNetLightning(pl.LightningModule):
         sizes = [0]
         for idx in range(batch.ptr.shape[0] - 1):
             atoms = batch.z[batch.ptr[idx]: batch.ptr[idx + 1]]
-            size = sum([self.net.orbital_mask[atom.item()].shape[0] for atom in atoms])
+            size = sum([self.model.orbital_mask[atom.item()].shape[0] for atom in atoms])
             sizes.append(size + sum(sizes))
         return sizes
     
